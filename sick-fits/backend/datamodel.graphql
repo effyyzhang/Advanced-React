@@ -4,7 +4,7 @@ enum Permission {
   ITEMCREATE
   ITEMUPDATE
   ITEMDELETE
-  PERMISIONUPDATE
+  PERMISSIONUPDATE
 }
 
 type User {
@@ -14,7 +14,7 @@ type User {
   password: String!
   resetToken: String
   resetTokenExpiry: Float
-  permissions: [Permission]! @scalarList(strategy: RELATION)
+  permissions: [Permission!]! @scalarList(strategy: RELATION)
 }
 
 type Item {
@@ -26,5 +26,5 @@ type Item {
   price: Int!
   createdAt: DateTime! @createdAt
   updatedAt: DateTime! @updatedAt
-  # user: User!
+  user: User!
 }

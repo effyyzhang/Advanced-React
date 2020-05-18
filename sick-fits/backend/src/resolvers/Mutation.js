@@ -2,12 +2,24 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { randomBytes } = require("crypto");
 const { promisify } = require("util");
+const { transport, styleEmail } = require("../mail");
+const { hasPermission } = require("../utils");
+
 const Mutations = {
   async createItem(parent, args, ctx, info) {
-    // TODO: Check if they are logged in
+    //Check if they are logged in
+    if (!ctx.request.userId) {
+      throw new Error("You must be logged in to create items.");
+    }
     const item = await ctx.db.mutation.createItem(
       {
         data: {
+          //Thi is how to create a relationship between the user and the items
+          user: {
+            connect: {
+              id: ctx.request.userId,
+            },
+          },
           ...args,
         },
       },
@@ -35,8 +47,15 @@ const Mutations = {
   async deleteItem(parent, args, ctx, info) {
     const where = { id: args.id };
     //find the item
-    const item = await ctx.db.query.item({ where }, `{id title}`);
+    const item = await ctx.db.query.item({ where }, `{id title user{id}}`);
     //check if they own that item, or have the permissions
+    const ownsItem = item.user.id === ctx.request.userId;
+    const hasPermissions = ctx.request.user.permissions.some((permission) =>
+      ["ADMIN", "ITEMDELETE"].includes(permission)
+    );
+    if (!ownsItem && hasPermissions) {
+      throw new Error("You don't have permission to do that!");
+    }
     //To do
     // delete it
     return ctx.db.mutation.deleteItem({ where }, info);
@@ -111,8 +130,19 @@ const Mutations = {
       data: { resetToken, resetTokenExpiry },
     });
     console.log(res);
-    return { message: "Reset Email sent!" };
     //3. Email them that reset token
+    const mailRes = await transport.sendMail({
+      from: "effyyzhang@gmail.com",
+      to: user.email,
+      subject: "Your Password Reset Token",
+      html: styleEmail(`Your Password Reset token is here!
+      \n\n
+      <a href="${process.env.FRONTEND_URL}/reset?resetToken=${resetToken}">
+      Click here to Reset your password
+      </a>`),
+    });
+    //4. return the message
+    return { message: "Reset Email sent!" };
   },
 
   async resetPassword(parent, args, ctx, info) {
@@ -149,6 +179,37 @@ const Mutations = {
     });
     //8. return the new user
     return updatedUser;
+  },
+  async updatePermissions(parent, args, ctx, info) {
+    //1. check if the user is logger in
+    if (!ctx.request.userId) {
+      throw new Error("You must be logged in!");
+    }
+    //2. Query this user's permissions
+    const currentUser = await ctx.db.query.user(
+      {
+        where: {
+          id: ctx.request.userId,
+        },
+      },
+      info
+    );
+    //3. Check if this user has the permissions to update the permissions
+    hasPermission(currentUser, ["ADMIN", "PERMISSIONUPDATE"]);
+    //4. Update the permissions
+    return ctx.db.mutation.updateUser(
+      {
+        data: {
+          permissions: {
+            set: args.permissions,
+          },
+        },
+        where: {
+          id: args.userId,
+        },
+      },
+      info
+    );
   },
 };
 

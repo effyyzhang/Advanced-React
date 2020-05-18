@@ -6,7 +6,7 @@ const db = require("./db");
 
 const server = createServer();
 
-//TODO use express middleware to handle cookies (JWT)
+//1. use express middleware to handle cookies (JWT)
 server.express.use(cookieParser());
 //decoded the JWT so we can get the user Id on each request
 server.express.use((req, res, next) => {
@@ -18,7 +18,18 @@ server.express.use((req, res, next) => {
   }
   next();
 });
-//TODO use express middleware to populate current user
+//2. use express middleware to populate current user
+server.express.use(async (req, res, next) => {
+  //if they didn't logged in, skip this
+  if (!req.userId) return next();
+  const user = await db.query.user(
+    { where: { id: req.userId } },
+    "{id, permissions, email, name}"
+  );
+  // console.log(user);
+  req.user = user;
+  next();
+});
 
 server.start(
   {
